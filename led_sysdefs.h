@@ -13,7 +13,7 @@
 #elif defined(__MKL26Z64__)
 // Include kl26/T-LC headers
 #include "platforms/arm/kl26/led_sysdefs_arm_kl26.h"
-#elif defined(__SAM3X8E__)
+#elif defined(__SAM3X8E__) || defined(__SAM4S4A__)
 // Include sam/due headers
 #include "platforms/arm/sam/led_sysdefs_arm_sam.h"
 #elif defined(STM32F10X_MD)

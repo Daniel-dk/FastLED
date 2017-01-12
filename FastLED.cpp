@@ -2,7 +2,7 @@
 #include "FastLED.h"
 
 
-#if defined(__SAM3X8E__)
+#if defined(__SAM3X8E__)  || defined(__SAM4S4A__)
 volatile uint32_t fuckit;
 #endif
 
