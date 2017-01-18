@@ -122,6 +122,7 @@ template<> __attribute__((always_inline)) inline void delaycycles<5>() {NOP2;NOP
 
 // #define NS(_NS) ( (_NS * (F_CPU / 1000000L))) / 1000
 #define NS(_NS) (((_NS * F_CPU_MHZ) + 999) / 1000)
+
 #define CLKS_TO_MICROS(_CLKS) ((long)(_CLKS)) / (F_CPU / 1000000L)
 
 //  Macro for making sure there's enough time available

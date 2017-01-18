@@ -18,14 +18,15 @@ typedef volatile       uint32_t RwReg; /**< Read-Write 8-bit register (volatile 
 #endif
 
 
-#ifndef DUE_TIMER_CHANNEL
-#define DUE_TIMER_CHANNEL 0
-#endif
 
 
 
 
 #if defined(__SAM3X8E__)
+#ifndef DUE_TIMER_CHANNEL
+#define DUE_TIMER_CHANNEL 0
+#endif
+
 
 #define DUE_TIMER ((DUE_TIMER_GROUP==0) ? TC0 : ((DUE_TIMER_GROUP==1) ? TC1 : TC2))
 #define DUE_TIMER_ID (ID_TC0 + (DUE_TIMER_GROUP*3) + DUE_TIMER_CHANNEL)
@@ -33,11 +34,19 @@ typedef volatile       uint32_t RwReg; /**< Read-Write 8-bit register (volatile 
 #define DUE_TIMER_RUNNING ((DUE_TIMER->TC_CHANNEL[DUE_TIMER_CHANNEL].TC_SR & TC_SR_CLKSTA) != 0)
 
 #elif defined(__SAM4S4A__)
+#ifndef SAM4S_TIMER_CHANNEL
+#define SAM4S_TIMER_CHANNEL 0
+#endif
 
 #define DUE_TIMER TC0  // SAM4S has only TC0 available, no defs for TC1 or TC2
 #define DUE_TIMER_ID ID_TC0
-#define DUE_TIMER_VAL (DUE_TIMER->TC_CHANNEL[DUE_TIMER_CHANNEL].TC_CV<<1)
-#define DUE_TIMER_RUNNING ((DUE_TIMER->TC_CHANNEL[DUE_TIMER_CHANNEL].TC_SR & TC_SR_CLKSTA) != 0)
+#define DUE_TIMER_VAL ((DUE_TIMER->TC_CHANNEL[SAM4S_TIMER_CHANNEL].TC_CV)<<1)
+#define DUE_TIMER_RUNNING ((DUE_TIMER->TC_CHANNEL[SAM4S_TIMER_CHANNEL].TC_SR & TC_SR_CLKSTA) != 0)
+
+#define DUE_TIMER_START (DUE_TIMER->TC_CHANNEL[SAM4S_TIMER_CHANNEL].TC_CCR =TC_CCR_CLKEN | TC_CCR_SWTRG)
+#define DUE_TIMER_STOP (DUE_TIMER->TC_CHANNEL[SAM4S_TIMER_CHANNEL].TC_CCR =TC_CCR_CLKDIS)
+
+
 
 #endif
 #ifndef INTERRUPT_THRESHOLD

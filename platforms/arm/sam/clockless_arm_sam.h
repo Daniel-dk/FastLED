@@ -24,6 +24,9 @@ class ClocklessController : public CPixelLEDController<RGB_ORDER> {
 	data_t mPinMask;
 	data_ptr_t mPort;
 	CMinWait<WAIT_TIME> mWait;
+
+
+
 public:
 	virtual void init() {
 		FastPinBB<DATA_PIN>::setOutput();
@@ -78,6 +81,7 @@ protected:
 	static uint32_t showRGBInternal(PixelController<RGB_ORDER> pixels) {
 		// Setup and start the clock
 		TC_Configure(DUE_TIMER, DUE_TIMER_CHANNEL, TC_CMR_TCCLKS_TIMER_CLOCK1);
+		//set timer to something more reasonable( not 60 MHz ( MCLK/2 taht TC_CMR_TCCLKS_TIMER_CLOCK1 is ) )
 		pmc_enable_periph_clk(DUE_TIMER_ID);
 		TC_Start(DUE_TIMER, DUE_TIMER_CHANNEL);
 
@@ -135,6 +139,8 @@ class ClocklessController : public CPixelLEDController<RGB_ORDER> {
 	data_t mPinMask;
 	data_ptr_t mPort;
 	CMinWait<WAIT_TIME> mWait;
+
+
 public:
 	virtual void init() {
 		FastPinBB<DATA_PIN>::setOutput();
@@ -157,27 +163,32 @@ protected:
 		mWait.mark();
 	}
 
-	template<int BITS>  __attribute__((always_inline)) inline static void writeBits(register uint32_t & next_mark, register data_ptr_t port, register uint8_t & b) {
+	template<int BITS>  __attribute__((always_inline)) inline static void writeBits(register uint16_t & next_mark, register data_ptr_t port, register uint8_t & b) {
 		// Make sure we don't slot into a wrapping spot, this will delay up to 12.5µs for WS2812
 		// bool bShift=0;
 		// while(VAL < (TOTAL*10)) { bShift=true; }
 		// if(bShift) { next_mark = (VAL-TOTAL); };
+		//DUE_TIMER_START;
+		//next_mark = (DUE_TIMER_VAL + (TOTAL));
 
-
+		// TOTAL = T1+T2+T3 ==  30 + 75 + 45 timer ticks
 		for (register uint32_t i = BITS; i > 0; i--) {
 			// wait to start the bit, then set the pin high
 			while (DUE_TIMER_VAL < next_mark);
-			next_mark = ((DUE_TIMER_VAL + TOTAL) % 0xFFFF);// UINT16_MAX // daniel handling rollover for sam4's 16 bit timer ( due has 32 bit timers )
+
+			next_mark = ((DUE_TIMER_VAL + TOTAL));// sam4's 16 bit timer overflows ( due has 32 bit timers )
 			*port = 1;
 
 			// how long we want to wait next depends on whether or not our bit is set to 1 or 0
 			if (b & 0x80) {
-				// we're a 1, wait until there's less than T3 clocks left // WS2812B 800kHz,: ~375 ns (45 ticks) 
-				while ((next_mark - DUE_TIMER_VAL) >(T3));
+				// we're a 1, wait until there's less than T3 clocks left
+			*port = 1;
+				//while ( (next_mark - DUE_TIMER_VAL) > (T3) );
+				while ( (next_mark - DUE_TIMER_VAL) > (T3) );
 			}
 			else {
 				// we're a 0, wait until there's less than (T2+T3+stop) clocks left in this bit  // ws2812B 800kHz : ~250ns +  625ns = 875ns +6 (30+75 = 105 tics)
-				while ((next_mark - DUE_TIMER_VAL) > (T2 + T3 + 6 + TADJUST + TADJUST)); 
+				while (((next_mark - DUE_TIMER_VAL))> (T2 + T3 + 6 + TADJUST + TADJUST));
 			}
 			*port = 0;
 			b <<= 1;
@@ -189,10 +200,12 @@ protected:
 	// gcc will use register Y for the this pointer.
 
 	static uint32_t showRGBInternal(PixelController<RGB_ORDER> pixels) {
+
 		// Setup and start the clock
-		TC_Configure(DUE_TIMER, DUE_TIMER_CHANNEL, TC_CMR_TCCLKS_TIMER_CLOCK1);
+		TC_Configure(DUE_TIMER, SAM4S_TIMER_CHANNEL, TC_CMR_TCCLKS_TIMER_CLOCK1);
 		pmc_enable_periph_clk(DUE_TIMER_ID);
-		TC_Start(DUE_TIMER, DUE_TIMER_CHANNEL);
+		TC_Start(DUE_TIMER, SAM4S_TIMER_CHANNEL);
+	
 
 		register data_ptr_t port asm("r7") = FastPinBB<DATA_PIN>::port(); FORCE_REFERENCE(port);
 		*port = 0;
@@ -201,16 +214,24 @@ protected:
 		pixels.preStepFirstByteDithering();
 		uint8_t b = pixels.loadAndScale0();
 
-		uint32_t next_mark = (DUE_TIMER_VAL + (TOTAL)) ; // % UINT16_MAX daniel handling rollover for sam4's fast 16 bit timer
+		
+		uint16_t next_mark = (DUE_TIMER_VAL + (TOTAL)); // % UINT16_MAX daniel handling rollover for sam4's fast 16 bit timer
+
 		while (pixels.has(1)) {
 			pixels.stepDithering();
 
 #if (FASTLED_ALLOW_INTERRUPTS == 1)
 			cli();
-			if (DUE_TIMER_VAL > next_mark) {
-				if ((DUE_TIMER_VAL - next_mark) > ((WAIT_TIME - INTERRUPT_THRESHOLD)*CLKS_PER_US)) { sei(); TC_Stop(DUE_TIMER, DUE_TIMER_CHANNEL); return 0; }
+			if ((DUE_TIMER_VAL > next_mark)) { //
+				if ((DUE_TIMER_VAL - next_mark) > ((WAIT_TIME - INTERRUPT_THRESHOLD)*CLKS_PER_US)) { 
+					sei(); 
+					TC_Stop(DUE_TIMER, SAM4S_TIMER_CHANNEL);
+					return 0;
+				}
 			}
 #endif
+			DUE_TIMER_START;
+			next_mark = (DUE_TIMER_VAL + (TOTAL));
 
 			writeBits<8 + XTRA0>(next_mark, port, b);
 
@@ -221,12 +242,13 @@ protected:
 			writeBits<8 + XTRA0>(next_mark, port, b);
 
 			b = pixels.advanceAndLoadAndScale0();
+
 #if (FASTLED_ALLOW_INTERRUPTS == 1)
 			sei();
 #endif // (FASTLED_ALLOW_INTERRUPTS == 1)
 		}; // while (pixels.has(1)) {
 
-		TC_Stop(DUE_TIMER, DUE_TIMER_CHANNEL);
+		TC_Stop(DUE_TIMER, SAM4S_TIMER_CHANNEL);
 		return DUE_TIMER_VAL;
 	}
 
